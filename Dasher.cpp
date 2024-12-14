@@ -1,8 +1,6 @@
 #include "raylib.h"
 #include <string>
 
-
-
 struct AnimData
 {
     Rectangle rec;
@@ -12,7 +10,6 @@ struct AnimData
     float runningTime;
 };
 
-// >= windowDimArr[1] - scarfyData.rec.height
 bool isOnGround(AnimData data, int windowHeight) 
 {
     return data.pos.y >= windowHeight - data.rec.height;
@@ -84,8 +81,8 @@ int main()
     // Neb X vel (px/s)
     int nebVel {-200}; 
 
-    // number of nebulae
-    int n {20};
+    // maximum number of nebulae
+    const int n {20};
 
     // Animdata for Nebula
       
