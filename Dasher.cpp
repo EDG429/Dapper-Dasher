@@ -1,222 +1,185 @@
 #include "raylib.h"
-#include <string>
+#include <stdlib.h> 
+#include <string.h> 
 
-struct AnimData
+// Struct to hold animation data
+typedef struct AnimData 
 {
-    Rectangle rec;
-    Vector2 pos;
-    int frame;
-    float updateTime;
-    float runningTime;
-};
+	Rectangle rec;
+	Vector2 pos;
+	int frame;
+	float updateTime;
+	float runningTime;
+} AnimData;
 
-bool isOnGround(AnimData data, int windowHeight) 
+// Get an IsOnGround bool
+bool IsOnGround(const AnimData* data, int windowHeight) 
 {
-    return data.pos.y >= windowHeight - data.rec.height;
-};
+	return data->pos.y >= windowHeight - data->rec.height;
+}
 
-AnimData updateAnimData(AnimData data, float deltaTime, int maxFrame)
+// Update animation logic
+void UpdateAnimData(AnimData* data, float deltaTime, int maxFrame) 
 {
-    // update RunningTime
-    data.runningTime += deltaTime;
-    if (data.runningTime >= data.updateTime)
+	data->runningTime += deltaTime;
+	if (data->runningTime >= data->updateTime) 
     {
-        data.runningTime = 0.0;
-        // Set animation frame
-        data.rec.x = data.frame * data.rec.width;
-        data.frame++;
-        if (data.frame > maxFrame) data.frame = 0;        
-    }
-    return data;
-};
+		data->runningTime = 0.0f;
+		data->frame = (data->frame + 1) % (maxFrame + 1);
+		data->rec.x = data->frame * data->rec.width;
+	}
+}
 
-int main()
+// Parralax BGs
+void DrawScrollingBackground(Texture2D texture, float* offset, float speed, float scale) 
 {
-    // windowdim array
-    const int windowDimArr[2] {512, 380};
+	*offset -= speed;
+	if (*offset <= -texture.width * scale) {
+		*offset = 0.0f;
+	}
+	Vector2 pos1 = {*offset, 0.0f};
+	Vector2 pos2 = {*offset + texture.width * scale, 0.0f};
+	DrawTextureEx(texture, pos1, 0.0f, scale, WHITE);
+	DrawTextureEx(texture, pos2, 0.0f, scale, WHITE);
+}
 
-    // Acceleration due to gravity (pixels/f/f)
-    const int gravity{1'000};
+int main() 
+{
+	// Window dimensions
+	const int windowWidth = 512;
+	const int windowHeight = 380;
 
-    const int jumpVel {-600};
+	InitWindow(windowWidth, windowHeight, "Dapper Dasher");
+	SetTargetFPS(60);
 
-    int velocity{0};
+	// Constants
+	const int gravity = 1'000;
+	const int jumpVel = -600;
+	const int nebVel = -200;
+	const int numNebulae = 20;
 
     // Boolean flags
-    bool is_on_ground = true;
-    bool collision = false;    
-    bool player_won = false;
-   
+	bool collision = false;
+	bool playerWon = false;
 
-    InitWindow(windowDimArr[0], windowDimArr[1], "Dapper Dasher");
-    SetTargetFPS(60);
-    // Textures
+	// Background textures
+	Texture2D bg = LoadTexture("textures/far-buildings.png");
+	Texture2D mid = LoadTexture("textures/back-buildings.png");
+	Texture2D fore = LoadTexture("textures/foreground.png");
+	float bgX = 0, midX = 0, foreX = 0;
 
-    // Backgrounds
-    Texture2D Background = LoadTexture("textures/far-buildings.png");
-    Texture2D midGrd = LoadTexture("textures/back-buildings.png");
-    Texture2D foreGrd = LoadTexture("textures/foreground.png");
-
-
-    //Scarfy
-    Texture2D scarfy = LoadTexture("textures/scarfy.png");
-    AnimData scarfyData;
-    scarfyData.rec.width = scarfy.width/6;
-    scarfyData.rec.height = scarfy.height;  
-    scarfyData.rec.x = 0;
-    scarfyData.rec.y = 0;
-    scarfyData.pos.x = windowDimArr[0]/2 - scarfyData.rec.width/2;
-    scarfyData.pos.y = windowDimArr[1] - scarfyData.rec.height;
-    scarfyData.frame = 0;
-    scarfyData.updateTime = 1.0/12.0;
-    scarfyData.runningTime = 0.0;
-
-
-    // Nebula
-    Texture2D nebula = LoadTexture("textures/12_nebula_spritesheet.png");
-    float bgX{};
-    float midbgX{};
-    float forebgX{};
-
-    // Neb X vel (px/s)
-    int nebVel {-200}; 
-
-    // maximum number of nebulae
-    const int n {20};
-
-    // Animdata for Nebula
-      
-    AnimData nebulae[n]{};    
-
-    for (int i{0};i<n+1;i++)
+	// Character textures
+	Texture2D scarfy = LoadTexture("textures/scarfy.png");
+	AnimData scarfyData = 
     {
-        nebulae[i].rec = {0.0, 0.0, nebula.width/8, nebula.height/8};
-        nebulae[i].pos.x = windowDimArr[0] + (500 * i);
-        nebulae[i].pos.y = windowDimArr[1] - nebula.height / 8;              
-        nebulae[i].frame = 0;
-        nebulae[i].updateTime =  1.0/16.0;
-        nebulae[i].runningTime = 0.0;        
-    }
-    
-    float finishLine {nebulae[n-1].pos.x + 50};
+		{0.0f, 0.0f, scarfy.width / 6.0f, (float)scarfy.height},
+		{windowWidth / 2.0f - scarfy.width / 12.0f, (float)(windowHeight - scarfy.height)},
+		0,
+		1.0f / 12.0f,
+		0.0f
+	};
+	int velocity = 0;
 
-    while(!WindowShouldClose())
-    {   
-        // Delta time (time since last frame)
-        const float dT {GetFrameTime()};
-        // Beginning drawing
-        BeginDrawing();
-        ClearBackground(WHITE);
+	// Nebulae textures
+	Texture2D nebula = LoadTexture("textures/12_nebula_spritesheet.png");
+	AnimData* nebulae = (AnimData*)malloc(numNebulae * sizeof(AnimData));
+	if (nebulae == NULL) 
+    {
+		CloseWindow();
+		return -1; // if allocation failed
+	}
 
-        // Background handling
-        bgX -= 20 * dT*1.1;
-        midbgX -= 20 * dT*1.5;
-        forebgX -= 20 * dT*1.90;
-        
-        if (bgX <= - Background.width * 2) bgX = 0.0;
-        if (midbgX <= - Background.width * 2) midbgX = 0.0;
-        if (forebgX <= - Background.width * 2) forebgX = 0.0;
+    // Preventing UB
+	memset(nebulae, 0, numNebulae * sizeof(AnimData));
+	for (int i = 0; i < numNebulae; i++) 
+    {
+		nebulae[i].rec = (Rectangle){0.0f, 0.0f, nebula.width / 8.0f, nebula.height / 8.0f};
+		nebulae[i].pos.x = windowWidth + i * 500.0f;
+		nebulae[i].pos.y = windowHeight - nebula.height / 8.0f;
+		nebulae[i].updateTime = 1.0f / 16.0f;
+	}
 
-        // Far background
-        Vector2 bg1Pos{bgX,0.0};
-        Vector2 bg2Pos{bgX + Background.width * 2, 0.0};
-        DrawTextureEx(Background, bg1Pos, 0.0, 2.0, WHITE);
-        DrawTextureEx(Background, bg2Pos, 0.0, 2.0, WHITE);
+	float finishLine = nebulae[numNebulae - 1].pos.x + 50;
 
-        // Middle background
-        Vector2 midbg1Pos{midbgX,0.0};
-        Vector2 midbg2Pos{midbgX + Background.width * 2, 0.0};
-        DrawTextureEx(midGrd, midbg1Pos, 0.0, 2.0, WHITE);
-        DrawTextureEx(midGrd, midbg2Pos, 0.0, 2.0, WHITE);
+	// Game loop
+	while (!WindowShouldClose()) {
+		const float deltaTime = GetFrameTime();
 
-        // Foreground
-        Vector2 forebg1Pos{forebgX,0.0};
-        Vector2 forebg2Pos{forebgX + Background.width * 2, 0.0};
-        DrawTextureEx(foreGrd, forebg1Pos, 0.0, 2.0, WHITE);
-        DrawTextureEx(foreGrd, forebg2Pos, 0.0, 2.0, WHITE);
-        
-        /*Game Logic Start*/   
+		// Parrallax scrolling
+		DrawScrollingBackground(bg, &bgX, 20 * deltaTime * 1.1f, 2.0f);
+		DrawScrollingBackground(mid, &midX, 20 * deltaTime * 1.5f, 2.0f);
+		DrawScrollingBackground(fore, &foreX, 20 * deltaTime * 1.9f, 2.0f);
 
-        // Perform ground check
-        if ( isOnGround(scarfyData, windowDimArr[1])) 
+		// Ground check logic
+		if (IsOnGround(&scarfyData, windowHeight)) 
         {
-            is_on_ground = true,
-            velocity = 0;
-            
-        }  
-        else
-        {
-            is_on_ground = false;
-            velocity += gravity * dT;            
-        }
-
-        if (IsKeyPressed(KEY_SPACE) && is_on_ground)
-        {
-            is_on_ground = false;
-            velocity = jumpVel;                       
-        }
-
-        // Finishline crossing
-        finishLine += nebVel * dT;
-
-        for (AnimData nebula : nebulae)
-        {
-            int pad{50};
-            Rectangle nebRec
+			velocity = 0;
+			if (IsKeyPressed(KEY_SPACE)) 
             {
-                nebula.pos.x + pad,
-                nebula.pos.y + pad,
-                nebula.rec.width - pad * 2,
-                nebula.rec.height - pad * 2
-            };
-            Rectangle scarfyRec
-            {
-                scarfyData.pos.x,
-                scarfyData.pos.y,
-                scarfyData.rec.width,
-                scarfyData.rec.height
-            };
-            if (CheckCollisionRecs(nebRec, scarfyRec)) collision = true;
-        }
-
-        // Update position
-        scarfyData.pos.y += velocity * dT;        
-
-        // Update scarfy animation frame
-        scarfyData.runningTime += dT;
-        if (!is_on_ground) scarfyData.frame = 0;
-        scarfyData = updateAnimData(scarfyData, dT*0.5, 5);  
-        if (collision && !player_won)
+				velocity = jumpVel;
+			}
+		} 
+        else 
         {
-            DrawText("GAME OVER",windowDimArr[0]/2 - 150,windowDimArr[1]/2,50,WHITE);            
-        }
-        else if (scarfyData.pos.x > finishLine)
-        {
-            DrawText("YOU WIN",windowDimArr[0]/2 - 125,windowDimArr[1]/2,50,WHITE);
-            player_won = true;
-        }
-        else
-        {
-            for (int i{0};i<n+1;i++)
-            {   
-                nebulae[i].pos.x += nebVel * dT;
-                nebulae[i] = updateAnimData(nebulae[i], dT*0.5, 7);
-            
-                // Draw the nebula
-                DrawTextureRec(nebula, nebulae[i].rec, nebulae[i].pos, WHITE);
+			velocity += gravity * deltaTime;
+            scarfyData.frame = 1;
+		}
 
-                // Draw scarfy
-                DrawTextureRec(scarfy, scarfyData.rec, scarfyData.pos, WHITE);
-            }      
-        }  
-     
-        /*Game Logic End*/
+		// Update positions
+		scarfyData.pos.y += velocity * deltaTime;
 
-        // Ending drawing
-        EndDrawing();
-    }
-    UnloadTexture(scarfy);
-    UnloadTexture(nebula);
-    UnloadTexture(Background);
-    CloseWindow();
-}   
+		// Update animations
+		UpdateAnimData(&scarfyData, deltaTime, 5);
+		for (int i = 0; i < numNebulae; i++) 
+        {
+			nebulae[i].pos.x += nebVel * deltaTime;
+			UpdateAnimData(&nebulae[i], deltaTime, 7);
+		}
+
+		// Check collisions
+		for (int i = 0; i < numNebulae; i++) 
+        {
+			Rectangle nebRect = {
+				nebulae[i].pos.x + 50, nebulae[i].pos.y + 50,
+				nebulae[i].rec.width - 100, nebulae[i].rec.height - 100
+			};
+			Rectangle scarfyRect = {
+				scarfyData.pos.x, scarfyData.pos.y,
+				scarfyData.rec.width, scarfyData.rec.height
+			};
+			if (CheckCollisionRecs(nebRect, scarfyRect)) collision = 1;
+		}
+
+		// Draw game state
+		BeginDrawing();
+		ClearBackground(WHITE);
+
+		if (collision && !playerWon) 
+        {
+			DrawText("GAME OVER", windowWidth / 2 - 150, windowHeight / 2, 50, RED);
+		} else if (scarfyData.pos.x > finishLine) 
+        {
+			DrawText("YOU WIN!", windowWidth / 2 - 125, windowHeight / 2, 50, GREEN);
+			playerWon = 1;
+		} else 
+        {
+			for (int i = 0; i < numNebulae; i++) {
+				DrawTextureRec(nebula, nebulae[i].rec, nebulae[i].pos, WHITE);
+			}
+			DrawTextureRec(scarfy, scarfyData.rec, scarfyData.pos, WHITE);
+		}
+
+		EndDrawing();
+	}
+
+	// Cleanup
+	free(nebulae);
+	UnloadTexture(scarfy);
+	UnloadTexture(nebula);
+	UnloadTexture(bg);
+	UnloadTexture(mid);
+	UnloadTexture(fore);
+	CloseWindow();
+
+	return 0;
+}
