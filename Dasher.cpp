@@ -82,15 +82,16 @@ int main()
 
 	// Nebulae textures
 	Texture2D nebula = LoadTexture("textures/12_nebula_spritesheet.png");
-	AnimData* nebulae = (AnimData*)malloc(numNebulae * sizeof(AnimData));
+    
+    // C style Dynamic memory allocation, in C++ would be: AnimData* nebulae = new AnimData[numNebulae]; but it can add an overhead. For a simple struct prefer C style.
+	AnimData* nebulae = (AnimData*)malloc(numNebulae * sizeof(AnimData));  
 	if (nebulae == NULL) 
     {
 		CloseWindow();
 		return -1; // if allocation failed
-	}
+	}    
+	memset(nebulae, 0, numNebulae * sizeof(AnimData));// Preventing UB
 
-    // Preventing UB
-	memset(nebulae, 0, numNebulae * sizeof(AnimData));
 	for (int i = 0; i < numNebulae; i++) 
     {
 		nebulae[i].rec = (Rectangle){0.0f, 0.0f, nebula.width / 8.0f, nebula.height / 8.0f};
